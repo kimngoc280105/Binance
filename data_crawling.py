@@ -139,9 +139,9 @@ class CryptoDataCollector:
             return
         
         # Tạo thư mục nếu chưa có
-        os.makedirs('data/raw', exist_ok=True)
+        os.makedirs('data', exist_ok=True)
         
-        filepath = f'data/raw/{filename}'
+        filepath = f'data/{filename}'
         df.to_csv(filepath, index=False, encoding='utf-8-sig')
         
         print(f"\n{'='*70}")
@@ -161,7 +161,6 @@ class CryptoDataCollector:
         print(f"   • Records/symbol: {len(df) // df['symbol'].nunique():.0f}")
         
         return filepath
-
 # ============================================================
 # SỬ DỤNG
 # ============================================================
