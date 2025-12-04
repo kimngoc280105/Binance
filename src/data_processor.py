@@ -56,19 +56,24 @@ class CryptoDataProcessor:
                 if negative_count > 0:
                     print(f"⚠ Cảnh báo: {negative_count} giá trị âm trong cột {col}")
                     
-        # Kiểm tra tính nhất quán: high >= low, high >= close, low <= close
-        if all(col in self.df.columns for col in ['high', 'low', 'close']):
-            invalid_high_low = (self.df['high'] < self.df['low']).sum()
-            invalid_high_close = (self.df['high'] < self.df['close']).sum()
-            invalid_low_close = (self.df['low'] > self.df['close']).sum()
-            
-            
-            if invalid_high_low > 0:
-                print(f"⚠ Cảnh báo: {invalid_high_low} bản ghi có high < low")
-            if invalid_high_close > 0:
-                print(f"⚠ Cảnh báo: {invalid_high_close} bản ghi có high < close")
-            if invalid_low_close > 0:
-                print(f"⚠ Cảnh báo: {invalid_low_close} bản ghi có low > close")
+        required_cols = ['open', 'high', 'low', 'close']
+
+        if all(col in self.df.columns for col in required_cols):
+
+            # Max và Min giữa open-close
+            max_oc = self.df[['open', 'close']].max(axis=1)
+            min_oc = self.df[['open', 'close']].min(axis=1)
+
+            # Điều kiện sai
+            invalid_high = (self.df['high'] < max_oc).sum()
+            invalid_low  = (self.df['low']  > min_oc).sum()
+
+            # In cảnh báo
+            if invalid_high > 0:
+                print(f"Cảnh báo: {invalid_high} bản ghi có high < max(open, close)")
+
+            if invalid_low > 0:
+                print(f"Cảnh báo: {invalid_low} bản ghi có low > min(open, close)")
     
     def explore_data(self):
         """Khám phá thông tin cơ bản của dữ liệu"""
@@ -78,14 +83,39 @@ class CryptoDataProcessor:
         print("=" * 60)
         print("PHÂN TÍCH DỮ LIỆU CHI TIẾT")
         print("=" * 60)
+
+         # 1. Ý nghĩa của từng cột
+        print("\n0. Ý NGHĨA CÁC CỘT DỮ LIỆU:")
+        print("-" * 50)
         
-        # 1. Thông tin cơ bản
+        column_descriptions = {
+            'open': 'Giá mở cửa tại đầu mỗi giờ',
+            'high': 'Giá cao nhất trong giờ',
+            'low': 'Giá thấp nhất trong giờ',
+            'close': 'Giá đóng cửa cuối giờ',
+            'volume': 'Khối lượng giao dịch (base currency)',
+            'quote_volume': 'Khối lượng giao dịch (quote currency)',
+            'trades_count': 'Số lượng giao dịch trong giờ',
+            'taker_buy_base_volume': 'Khối lượng mua từ taker (base)',
+            'taker_buy_quote_volume': 'Khối lượng mua từ taker (quote)',
+            'timestamp': 'Thời điểm bắt đầu của khoảng thời gian',
+            'date': 'Ngày',
+            'time': 'Giờ',
+            'symbol': 'Cặp giao dịch (ví dụ: BTCUSDT)',
+            'interval': 'Khoảng thời gian (1h, 4h, 1d, v.v.)'
+        }
+        
+        for col in self.df.columns:
+            desc = column_descriptions.get(col, 'Không có mô tả')
+            print(f"• {col:<25}: {desc}")
+
+        # 2. Thông tin cơ bản
         print(f"\n1. KÍCH THƯỚC DỮ LIỆU:")
         print(f"   • Số hàng: {self.df.shape[0]:,}")
         print(f"   • Số cột: {self.df.shape[1]}")
         print(f"   • Kích thước bộ nhớ: {self.df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
         
-        # 2. Kiểu dữ liệu và thông tin cột
+        # 3. Kiểu dữ liệu và thông tin cột
         print("\n2. THÔNG TIN CÁC CỘT:")
         column_info = []
         for col in self.df.columns:
@@ -110,7 +140,7 @@ class CryptoDataProcessor:
         col_df = pd.DataFrame(column_info)
         print(col_df.to_string(index=False))
         
-        # 3. Thống kê mô tả chi tiết
+        # 4. Thống kê mô tả chi tiết
         print("\n3. THỐNG KÊ MÔ TẢ CHI TIẾT:")
         numeric_cols = self.df.select_dtypes(include=[np.number]).columns
         
