@@ -2,10 +2,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from scipy import stats
-from scipy.stats import zscore, norm, ttest_ind, f_oneway
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from scipy.stats import zscore
 from sklearn.impute import KNNImputer
-from sklearn.decomposition import PCA
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -23,21 +21,19 @@ class CryptoDataProcessor:
         """
         self.file_path = file_path
         self.df = None
-        self.scalers = {}
-        self.pca = None
         
     def load_data(self):
         """Tải dữ liệu từ file CSV"""
         try:
             self.df = pd.read_csv(self.file_path)
-            print(f"✓ Đã tải {len(self.df)} bản ghi, {self.df.shape[1]} cột")
+            print(f" Đã tải {len(self.df)} bản ghi, {self.df.shape[1]} cột")
             
             # Kiểm tra tính hợp lệ của dữ liệu
             self.validate_data_integrity()
             
             return self.df
         except Exception as e:
-            print(f"✗ Lỗi khi tải dữ liệu: {str(e)}")
+            print(f" Lỗi khi tải dữ liệu: {str(e)}")
             return None
     
     def validate_data_integrity(self):
@@ -54,7 +50,7 @@ class CryptoDataProcessor:
             if col in self.df.columns:
                 negative_count = (self.df[col] < 0).sum()
                 if negative_count > 0:
-                    print(f"⚠ Cảnh báo: {negative_count} giá trị âm trong cột {col}")
+                    print(f"Cảnh báo: {negative_count} giá trị âm trong cột {col}")
                     
         required_cols = ['open', 'high', 'low', 'close']
 
@@ -178,7 +174,7 @@ class CryptoDataProcessor:
         
         initial_missing = self.df.isnull().sum().sum()
         if initial_missing == 0:
-            print("✓ Không có giá trị missing")
+            print(" Không có giá trị missing")
             return self.df
         
         print(f"• Tổng giá trị missing ban đầu: {initial_missing}")
@@ -203,20 +199,13 @@ class CryptoDataProcessor:
             imputed_data = imputer.fit_transform(self.df[numeric_cols])
             self.df[numeric_cols] = imputed_data
             
-        elif strategy == 'interpolate':
-            # Nội suy theo thời gian (nếu có cột timestamp)
-            if 'timestamp' in self.df.columns:
-                self.df = self.df.sort_values('timestamp')
-                for col in numeric_cols:
-                    if self.df[col].isnull().sum() > 0:
-                        self.df[col] = self.df[col].interpolate(method='time')
         
         # Forward/backward fill cho các giá trị còn lại
         self.df = self.df.fillna(method='ffill').fillna(method='bfill')
         
         final_missing = self.df.isnull().sum().sum()
         print(f"• Tổng giá trị missing sau xử lý: {final_missing}")
-        print(f"✓ Đã xử lý {initial_missing - final_missing} giá trị missing")
+        print(f" Đã xử lý {initial_missing - final_missing} giá trị missing")
         
         return self.df
     
@@ -237,8 +226,7 @@ class CryptoDataProcessor:
         print(f"\nXỬ LÝ OUTLIERS (Method: {method}, By Symbol: {by_symbol})")
         
         numeric_cols = self.df.select_dtypes(include=[np.number]).columns
-        important_cols = ['open', 'high', 'low', 'close', 'volume', 'quote_volume']
-        important_cols = [col for col in important_cols if col in numeric_cols]
+        important_cols = [col for col in numeric_cols]
         
         outlier_counts = {}
         processed_symbols = 0
@@ -363,7 +351,7 @@ class CryptoDataProcessor:
             print(f"  - Tổng outliers: {total_outliers:,}")
             print(f"  - Tỷ lệ outliers: {(total_outliers/total_records*100):.2f}%")
         else:
-            print("✓ Không phát hiện outliers đáng kể")
+            print(" Không phát hiện outliers đáng kể")
         
         return self.df
     
@@ -391,9 +379,9 @@ class CryptoDataProcessor:
         print("\n" + "="*60)
         print("XỬ LÝ DỮ LIỆU HOÀN TẤT")
         print("="*60)
-        print(f"✓ Kích thước dữ liệu cuối: {self.df.shape}")
-        print(f"✓ Số features: {len(self.df.columns)}")
-        print(f"✓ Số bản ghi: {len(self.df)}")
+        print(f" Kích thước dữ liệu cuối: {self.df.shape}")
+        print(f" Số features: {len(self.df.columns)}")
+        print(f" Số bản ghi: {len(self.df)}")
         
         return self.df
 
