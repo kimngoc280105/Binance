@@ -120,7 +120,7 @@ class CryptoDataCollector:
             # Progress update mỗi 10 symbols
             if idx % 10 == 0:
                 total_records = sum(len(df) for df in all_data)
-                print(f"   📊 Tiến độ: {success} thành công | {total_records:,} records\n")
+                print(f"   Tiến độ: {success} thành công | {total_records:,} records\n")
         
         print("\n" + "="*70)
         print(f"Hoàn thành: {success}/{len(symbols)} symbols")
@@ -139,9 +139,9 @@ class CryptoDataCollector:
             return
         
         # Tạo thư mục nếu chưa có
-        os.makedirs('data', exist_ok=True)
+        os.makedirs('Data/raw', exist_ok=True)
         
-        filepath = f'data/{filename}'
+        filepath = f'Data/raw/{filename}'
         df.to_csv(filepath, index=False, encoding='utf-8-sig')
         
         print(f"\n{'='*70}")
