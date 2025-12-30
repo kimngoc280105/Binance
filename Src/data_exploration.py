@@ -157,7 +157,119 @@ class CryptoDataProcessor:
                 distribution_type = "Normal" if abs(skew_val) < 0.5 and abs(kurt_val) < 1 else "Non-normal"
                 print(f"   • {col}: Skewness={skew_val:.3f}, Kurtosis={kurt_val:.3f} → {distribution_type}")
         
+        # 5. Phân tích dữ liệu trùng lắp
+        self.analyze_duplicates()
+        
+        # 6. Phân tích dòng hoàn toàn trống
+        self.analyze_empty_rows()
+        
         return self.df
+    
+    def analyze_duplicates(self):
+        """Phân tích các dòng dữ liệu trùng lắp"""
+        print("\n" + "="*60)
+        print("5. PHÂN TÍCH DỮ LIỆU TRÙNG LẮP")
+        print("="*60)
+        
+        # Tổng số dòng trùng lắp hoàn toàn
+        total_duplicates = self.df.duplicated().sum()
+        total_rows = len(self.df)
+        dup_percent = (total_duplicates / total_rows) * 100
+        
+        print(f"\n   a) Dòng trùng lắp hoàn toàn (tất cả cột giống nhau):")
+        print(f"      • Số dòng trùng: {total_duplicates:,} / {total_rows:,} ({dup_percent:.2f}%)")
+        
+        if total_duplicates > 0:
+            print(f"\n      Ví dụ các dòng trùng lắp:")
+            dup_df = self.df[self.df.duplicated(keep=False)].head(10)
+            print(dup_df.to_string(index=True))
+        
+        # Phân tích trùng lắp theo các cột quan trọng
+        key_cols = ['timestamp', 'symbol'] if all(col in self.df.columns for col in ['timestamp', 'symbol']) else []
+        
+        if key_cols:
+            key_duplicates = self.df.duplicated(subset=key_cols).sum()
+            key_dup_percent = (key_duplicates / total_rows) * 100
+            print(f"\n   b) Dòng trùng lắp theo khóa ({', '.join(key_cols)}):")
+            print(f"      • Số dòng trùng: {key_duplicates:,} / {total_rows:,} ({key_dup_percent:.2f}%)")
+            
+            if key_duplicates > 0:
+                print(f"\n      Ví dụ các dòng trùng theo khóa:")
+                key_dup_df = self.df[self.df.duplicated(subset=key_cols, keep=False)].sort_values(key_cols).head(10)
+                print(key_dup_df.to_string(index=True))
+        
+        # Thống kê trùng lắp theo từng cột
+        print(f"\n   c) Thống kê giá trị trùng theo từng cột:")
+        dup_stats = []
+        for col in self.df.columns:
+            unique_count = self.df[col].nunique()
+            total_count = len(self.df[col].dropna())
+            dup_count = total_count - unique_count
+            dup_rate = (dup_count / total_count * 100) if total_count > 0 else 0
+            dup_stats.append({
+                'Cột': col,
+                'Giá trị unique': unique_count,
+                'Tổng giá trị': total_count,
+                'Giá trị trùng': dup_count,
+                'Tỷ lệ trùng (%)': f"{dup_rate:.2f}"
+            })
+        
+        dup_stats_df = pd.DataFrame(dup_stats)
+        print(dup_stats_df.to_string(index=False))
+        
+        return total_duplicates
+    
+    def analyze_empty_rows(self):
+        """Phân tích các dòng dữ liệu hoàn toàn trống"""
+        print("\n" + "="*60)
+        print("6. PHÂN TÍCH DÒNG DỮ LIỆU TRỐNG")
+        print("="*60)
+        
+        total_rows = len(self.df)
+        
+        # Dòng hoàn toàn trống (tất cả cột đều NaN)
+        completely_empty = self.df.isna().all(axis=1).sum()
+        empty_percent = (completely_empty / total_rows) * 100
+        
+        print(f"\n   a) Dòng hoàn toàn trống (tất cả cột đều NaN/null):")
+        print(f"      • Số dòng trống: {completely_empty:,} / {total_rows:,} ({empty_percent:.2f}%)")
+        
+        if completely_empty > 0:
+            empty_indices = self.df[self.df.isna().all(axis=1)].index.tolist()
+            print(f"      • Chỉ số các dòng trống: {empty_indices[:20]}{'...' if len(empty_indices) > 20 else ''}")
+        
+        # Dòng gần như trống (>= 80% cột trống)
+        threshold = 0.8
+        nearly_empty = (self.df.isna().sum(axis=1) / len(self.df.columns) >= threshold).sum()
+        nearly_empty_percent = (nearly_empty / total_rows) * 100
+        
+        print(f"\n   b) Dòng gần như trống (>= {int(threshold*100)}% cột trống):")
+        print(f"      • Số dòng: {nearly_empty:,} / {total_rows:,} ({nearly_empty_percent:.2f}%)")
+        
+        # Thống kê missing theo từng cột
+        print(f"\n   c) Thống kê giá trị missing theo từng cột:")
+        missing_stats = []
+        for col in self.df.columns:
+            missing_count = self.df[col].isna().sum()
+            missing_percent = (missing_count / total_rows) * 100
+            missing_stats.append({
+                'Cột': col,
+                'Số missing': missing_count,
+                'Tỷ lệ missing (%)': f"{missing_percent:.2f}"
+            })
+        
+        missing_df = pd.DataFrame(missing_stats)
+        print(missing_df.to_string(index=False))
+        
+        # Phân tích pattern missing
+        print(f"\n   d) Phân tích pattern missing:")
+        missing_pattern = self.df.isna().sum(axis=1).value_counts().sort_index()
+        print(f"      Số cột missing | Số dòng")
+        for n_missing, count in missing_pattern.items():
+            pct = (count / total_rows) * 100
+            print(f"      {n_missing:^14} | {count:,} ({pct:.2f}%)")
+        
+        return completely_empty
     
     def handle_missing_values(self, strategy='knn', n_neighbors=5):
         """
