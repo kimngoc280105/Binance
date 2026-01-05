@@ -378,6 +378,7 @@ class CryptoVisualizer:
     def plot_single_distribution(self, column):
         """
         Vẽ biểu đồ phân phối chi tiết cho một cột cụ thể
+        Cấu trúc giống plot_data_distribution()
         
         Parameters:
         -----------
@@ -385,49 +386,296 @@ class CryptoVisualizer:
             Tên cột cần vẽ
         """
         if column not in self.df.columns:
-            print(f"Cột '{column}' không tồn tại trong dataframe")
+            print(f"❌ Cột '{column}' không tồn tại trong dataframe")
             return
         
+        print(f"📊 Vẽ phân phối cho cột: {column.upper()}")
+        
+        # Lấy dữ liệu
         data = self.df[column].dropna()
+        
+        if len(data) == 0:
+            print(f"   • {column}: Không có dữ liệu")
+            return
+        
+        # Lấy custom bins cho cột này
         bins = self._get_custom_bins_for_column(column, data)
         
-        # Tính histogram
+        # Tính histogram với custom bins
         hist_counts, bin_edges = np.histogram(data, bins=bins)
         
-        # Tạo labels
+        # Tạo labels cho các bins
         bin_labels = []
         for i in range(len(bin_edges) - 1):
             is_last = (i == len(bin_edges) - 2)
             label = self._format_bin_label(bin_edges[i], bin_edges[i+1], is_last)
             bin_labels.append(label)
         
-        # Lọc bins có dữ liệu
-        non_zero_mask = hist_counts > 0
-        filtered_labels = [bin_labels[i] for i in range(len(bin_labels)) if non_zero_mask[i]]
-        filtered_counts = hist_counts[non_zero_mask]
+        # Gộp các bins nhỏ lại với nhau
+        merged_counts, merged_edges, merged_labels = self._merge_small_bins(
+            hist_counts, bin_edges, bin_labels
+        )
         
+        # Chỉ giữ lại các bins có dữ liệu (count > 0)
+        non_zero_mask = merged_counts > 0
+        filtered_labels = [merged_labels[i] for i in range(len(merged_labels)) if non_zero_mask[i]]
+        filtered_counts = merged_counts[non_zero_mask]
+        
+        # Tính phần trăm
+        total = filtered_counts.sum()
+        percentages = (filtered_counts / total * 100)
+        
+        # Chọn màu
+        color = '#4CAF50'  # Xanh lá
+        
+        # Tạo biểu đồ
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
             x=filtered_labels,
             y=filtered_counts,
+            marker_color=color,
+            marker_line_color='darkgray',
+            marker_line_width=1,
+            opacity=0.85,
+            text=[f'<b>{c:,}</b><br>({p:.1f}%)' for c, p in zip(filtered_counts, percentages)],
+            textposition='auto',
+            textfont=dict(size=12),
+            hovertemplate=(
+                f'<b>{column}</b><br>'
+                'Khoảng: %{x}<br>'
+                'Số lượng: %{y:,}<br>'
+                '<extra></extra>'
+            )
+        ))
+        
+        # Tính thống kê
+        stats_text = (
+            f"<b>Thống kê:</b><br>"
+            f"N = {len(data):,}<br>"
+            f"Mean = {data.mean():,.4f}<br>"
+            f"Median = {data.median():,.4f}<br>"
+            f"Min = {data.min():,.6g}<br>"
+            f"Max = {data.max():,.2f}"
+        )
+        
+        # Cập nhật layout
+        fig.update_layout(
+            title=dict(
+                text=f'<b>Phân Phối của {column.upper()}</b>',
+                x=0.5,
+                font=dict(size=20)
+            ),
+            xaxis_title=dict(text=f'Khoảng giá trị {column}', font=dict(size=14)),
+            yaxis_title=dict(text='Số lượng bản ghi', font=dict(size=14)),
+            height=650,
+            width=1200,
+            template='plotly_white',
+            font=dict(family="Arial", size=12),
+            showlegend=False,
+            # Thêm annotation thống kê
+            annotations=[
+                dict(
+                    x=0.98,
+                    y=0.95,
+                    xref='paper',
+                    yref='paper',
+                    text=stats_text,
+                    showarrow=False,
+                    font=dict(size=11),
+                    align='left',
+                    bgcolor='rgba(255, 255, 255, 0.8)',
+                    bordercolor='gray',
+                    borderwidth=1,
+                    borderpad=5
+                )
+            ],
+            bargap=0.15,
+            margin=dict(t=80, b=80)
+        )
+        
+        # Xoay labels nếu có nhiều bins
+        if len(filtered_labels) > 8:
+            fig.update_xaxes(tickangle=45)
+        
+        # Hiển thị biểu đồ
+        fig.show()
+        
+        # In bảng thống kê phần trăm
+        self._print_percentage_table(column, filtered_labels, filtered_counts, percentages)
+    
+    def plot_grouped_distribution(self, col1, col2, n_bins=20):
+        """
+        Vẽ biểu đồ phân phối 2 cột với các cột liền kề (grouped bar chart)
+        
+        Parameters:
+        -----------
+        col1 : str
+            Tên cột thứ nhất (ví dụ: 'open')
+        col2 : str
+            Tên cột thứ hai (ví dụ: 'low')
+        n_bins : int
+            Số lượng bins (chỉ dùng khi không có custom_bins)
+        """
+        # Kiểm tra cột tồn tại
+        for col in [col1, col2]:
+            if col not in self.df.columns:
+                print(f"❌ Cột '{col}' không tồn tại trong dataframe")
+                return
+        
+        print(f"📊 Vẽ phân phối {col1.upper()} vs {col2.upper()}...")
+        
+        # Lấy dữ liệu
+        data1 = self.df[col1].dropna()
+        data2 = self.df[col2].dropna()
+        
+        # Sử dụng custom bins có sẵn (ưu tiên bins của col1)
+        combined_data = pd.concat([data1, data2])
+        bins = self._get_custom_bins_for_column(col1, combined_data)
+        
+        # Tính histogram cho cả 2 cột với cùng bins
+        counts1, bin_edges = np.histogram(data1, bins=bins)
+        counts2, _ = np.histogram(data2, bins=bins)
+        
+        # Tạo labels cho bins
+        bin_labels = []
+        for i in range(len(bin_edges) - 1):
+            label = self._format_bin_label(bin_edges[i], bin_edges[i+1], i == len(bin_edges) - 2)
+            bin_labels.append(label)
+        
+        # Lọc chỉ giữ bins có ít nhất 1 trong 2 cột có dữ liệu
+        mask = (counts1 > 0) | (counts2 > 0)
+        filtered_labels = [bin_labels[i] for i in range(len(bin_labels)) if mask[i]]
+        filtered_counts1 = counts1[mask]
+        filtered_counts2 = counts2[mask]
+        
+        # Tính phần trăm
+        total1, total2 = filtered_counts1.sum(), filtered_counts2.sum()
+        pct1 = filtered_counts1 / total1 * 100 if total1 > 0 else filtered_counts1
+        pct2 = filtered_counts2 / total2 * 100 if total2 > 0 else filtered_counts2
+        
+        # Tạo biểu đồ với Plotly
+        fig = go.Figure()
+        
+        # Cột 1
+        fig.add_trace(go.Bar(
+            name=col1.upper(),
+            x=filtered_labels,
+            y=filtered_counts1,
             marker_color='steelblue',
             marker_line_color='darkblue',
             marker_line_width=1,
-            text=[f'{c:,}' if c > 0 else '' for c in filtered_counts],
+            opacity=0.8,
+            text=[f'{c:,}<br>({p:.1f}%)' for c, p in zip(filtered_counts1, pct1)],
             textposition='auto',
+            textfont=dict(size=12, color='black', family='Verdana'),
+            hovertemplate=(
+                f'<b>{col1.upper()}</b><br>'
+                'Khoảng: %{x}<br>'
+                'Số lượng: %{y:,}<br>'
+                '<extra></extra>'
+            )
         ))
         
-        fig.update_layout(
-            title=f'<b>Phân Phối của {column.upper()}</b>',
-            xaxis_title=column,
-            yaxis_title='Số lượng',
-            height=700,
-            width=1400,
-            template='plotly_white'
+        # Cột 2
+        fig.add_trace(go.Bar(
+            name=col2.upper(),
+            x=filtered_labels,
+            y=filtered_counts2,
+            marker_color='coral',
+            marker_line_color='darkred',
+            marker_line_width=1,
+            opacity=0.8,
+            text=[f'{c:,}<br>({p:.1f}%)' for c, p in zip(filtered_counts2, pct2)],
+            textposition='auto',
+            textfont=dict(size=12, color='black', family='Verdana'),
+            hovertemplate=(
+                f'<b>{col2.upper()}</b><br>'
+                'Khoảng: %{x}<br>'
+                'Số lượng: %{y:,}<br>'
+                '<extra></extra>'
+            )
+        ))
+        
+        # Thống kê 2 cột (giống như bên của bạn)
+        stats_text = (
+            f"<b>Thống kê {col1.upper()}:</b><br>"
+            f"N = {len(data1):,}<br>"
+            f"Mean = {data1.mean():,.4f}<br>"
+            f"Median = {data1.median():,.4f}<br>"
+            f"Min = {data1.min():,.6g}<br>"
+            f"Max = {data1.max():,.2f}<br>"
+            f"<br><b>Thống kê {col2.upper()}:</b><br>"
+            f"N = {len(data2):,}<br>"
+            f"Mean = {data2.mean():,.4f}<br>"
+            f"Median = {data2.median():,.4f}<br>"
+            f"Min = {data2.min():,.6g}<br>"
+            f"Max = {data2.max():,.2f}"
         )
         
+        # Layout
+        fig.update_layout(
+            title=dict(
+                text=f'<b>So sánh Phân Phối: {col1.upper()} vs {col2.upper()}</b>',
+                x=0.5,
+                font=dict(size=22)
+            ),
+            xaxis_title=dict(text='Khoảng giá trị', font=dict(size=15)),
+            yaxis_title=dict(text='Số lượng bản ghi', font=dict(size=15)),
+            barmode='group',  # Side-by-side bars
+            height=750,
+            width=1400,
+            template='plotly_white',
+            font=dict(family="Arial", size=13),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=15)
+            ),
+            annotations=[
+                dict(
+                    x=0.98,
+                    y=0.95,
+                    xref='paper',
+                    yref='paper',
+                    text=stats_text,
+                    showarrow=False,
+                    font=dict(size=12),
+                    align='left',
+                    bgcolor='rgba(255, 255, 255, 0.9)',
+                    bordercolor='gray',
+                    borderwidth=1,
+                    borderpad=8
+                )
+            ],
+            bargap=0.15,
+            bargroupgap=0.05,
+            margin=dict(t=100, b=80)
+        )
+        
+        # Xoay labels nếu nhiều bins
+        if len(filtered_labels) > 10:
+            fig.update_xaxes(tickangle=45)
+        
         fig.show()
+        
+        # In bảng so sánh
+        print(f"\n📊 BẢNG SO SÁNH PHÂN BỐ: {col1.upper()} vs {col2.upper()}")
+        print("-" * 80)
+        print(f"{'Khoảng giá trị':<25} {col1.upper():>15} {col2.upper():>15} {'Chênh lệch':>15}")
+        print("-" * 80)
+        
+        for label, c1, c2 in zip(filtered_labels, filtered_counts1, filtered_counts2):
+            diff = c1 - c2
+            diff_str = f"+{diff:,}" if diff > 0 else f"{diff:,}"
+            print(f"{label:<25} {c1:>15,} {c2:>15,} {diff_str:>15}")
+        
+        print("-" * 80)
+        print(f"{'TỔNG':<25} {total1:>15,} {total2:>15,}")
+        print("=" * 80)
     
     def _get_stats_text(self, data):
         """Tạo text thống kê"""
@@ -444,3 +692,136 @@ class CryptoVisualizer:
                 75%: {clean_data.quantile(0.75):.4f}
                 Max: {clean_data.max():.4f}
                 Skew: {clean_data.skew():.3f}"""
+    
+    def plot_candlestick_top3(self, ma_periods=[20, 50]):
+        """
+        Vẽ biểu đồ nến (candlestick) với đường trung bình động cho 3 coin đầu tiên
+        Sử dụng toàn bộ dữ liệu có trong data
+        
+        Parameters:
+        -----------
+        ma_periods : list
+            Danh sách các period cho Moving Average (mặc định [20, 50])
+        """
+        print("📊 VẼ BIỂU ĐỒ NẾN CHO TOP 3 COINS")
+        print("=" * 60)
+        
+        # Lấy 3 coin đầu tiên
+        if 'symbol' not in self.df.columns:
+            print("❌ Không tìm thấy cột 'symbol'")
+            return
+        
+        top3_symbols = self.df['symbol'].unique()[:3]
+        print(f"📈 Coins: {list(top3_symbols)}")
+        
+        # Màu cho Moving Average
+        ma_colors = ['#E91E63', '#9C27B0', '#2196F3', '#4CAF50']  # Hồng, Tím, Xanh dương, Xanh lá
+        
+        for symbol in top3_symbols:
+            # Lọc dữ liệu cho symbol
+            symbol_df = self.df[self.df['symbol'] == symbol].copy()
+            
+            # Chuyển đổi timestamp nếu cần
+            if 'timestamp' in symbol_df.columns:
+                symbol_df['timestamp'] = pd.to_datetime(symbol_df['timestamp'])
+                symbol_df = symbol_df.sort_values('timestamp')
+            
+            # Sử dụng toàn bộ dữ liệu trong data
+            n_records = len(symbol_df)
+            n_days = symbol_df['date'].nunique() if 'date' in symbol_df.columns else n_records // 24
+            print(f"\n📅 {symbol}: {n_records} records ({n_days} ngày)")
+            
+            if len(symbol_df) < 50:
+                print(f"⚠️ {symbol}: Không đủ dữ liệu")
+                continue
+            
+            # Tính Moving Averages
+            for period in ma_periods:
+                symbol_df[f'MA{period}'] = symbol_df['close'].rolling(window=period).mean()
+            
+            # Tạo biểu đồ candlestick
+            fig = go.Figure()
+            
+            # Thêm candlestick
+            fig.add_trace(go.Candlestick(
+                x=symbol_df['timestamp'],
+                open=symbol_df['open'],
+                high=symbol_df['high'],
+                low=symbol_df['low'],
+                close=symbol_df['close'],
+                name=symbol,
+                increasing_line_color='#26A69A',  # Xanh lá
+                decreasing_line_color='#EF5350',  # Đỏ
+                increasing_fillcolor='#26A69A',
+                decreasing_fillcolor='#EF5350'
+            ))
+            
+            # Thêm Moving Averages
+            for i, period in enumerate(ma_periods):
+                color = ma_colors[i % len(ma_colors)]
+                fig.add_trace(go.Scatter(
+                    x=symbol_df['timestamp'],
+                    y=symbol_df[f'MA{period}'],
+                    mode='lines',
+                    name=f'MA{period}',
+                    line=dict(color=color, width=2),
+                    opacity=0.8
+                ))
+            
+            # Thống kê
+            last_close = symbol_df['close'].iloc[-1]
+            price_change = ((symbol_df['close'].iloc[-1] - symbol_df['close'].iloc[0]) / symbol_df['close'].iloc[0]) * 100
+            max_price = symbol_df['high'].max()
+            min_price = symbol_df['low'].min()
+            
+            stats_text = (
+                f"<b>Thống kê {symbol}:</b><br>"
+                f"Giá hiện tại: {last_close:,.2f}<br>"
+                f"Thay đổi: {price_change:+.2f}%<br>"
+                f"Cao nhất: {max_price:,.2f}<br>"
+                f"Thấp nhất: {min_price:,.2f}"
+            )
+            
+            # Layout
+            fig.update_layout(
+                title=dict(
+                    text=f'<b>Biểu Đồ Nến {symbol}</b>',
+                    x=0.5,
+                    font=dict(size=22)
+                ),
+                xaxis_title='Thời gian',
+                yaxis_title='Giá (USDT)',
+                height=600,
+                width=1400,
+                template='plotly_white',
+                font=dict(family="Arial", size=12),
+                xaxis_rangeslider_visible=False,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=12)
+                ),
+                annotations=[
+                    dict(
+                        x=0.02,
+                        y=0.98,
+                        xref='paper',
+                        yref='paper',
+                        text=stats_text,
+                        showarrow=False,
+                        font=dict(size=11, color='black'),
+                        align='left',
+                        bgcolor='rgba(255, 255, 255, 0.9)',
+                        bordercolor='gray',
+                        borderwidth=1,
+                        borderpad=8
+                    )
+                ],
+                margin=dict(t=80, b=60)
+            )
+            
+            fig.show()
+            print(f"✅ Đã vẽ biểu đồ cho {symbol}")
