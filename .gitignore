@@ -1,2 +1,2 @@
 venv/
-Src/__pycache__
+__pycache__/
