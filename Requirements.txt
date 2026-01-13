@@ -1,19 +1,19 @@
-numpy==1.26.2
-pandas==2.1.4
-scipy==1.11.4
-scikit-learn==1.3.2
+numpy
+pandas
+scipy
+scikit-learn
 
-matplotlib==3.8.2
-seaborn==0.13.0
-plotly>=5.18.0
+matplotlib
+seaborn
+plotly
 
-jupyter==1.0.0
-ipykernel==6.27.1
+jupyter
+ipykernel
 
-requests==2.31.0
+requests
 
 # Machine Learning
-xgboost==2.0.3
+xgboost
 
 # Time Series
-statsmodels==0.14.1
+statsmodels
